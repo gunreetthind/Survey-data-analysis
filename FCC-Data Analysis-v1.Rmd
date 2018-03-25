@@ -1,0 +1,1137 @@
+---
+title: "FCC_Data Analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+library(tidyverse)
+library(readxl)
+library(magrittr)
+library(forcats)
+library(ggplot2)
+library(stringr)
+library(plotly)
+library(magrittr)
+library(ggmap)
+library(zipcode)
+library(maps)
+library(mapdata)
+library(Hmisc)
+library(tm)
+
+library(topicmodels)
+
+# Use the SnowballC package to do stemming.
+library(SnowballC) 
+
+library(tidyverse)
+library(tidytext)
+
+library(cluster)
+library(Rtsne)
+
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+# Loading online and paper responses
+paper <- read_excel("C:/Users/gunreet.thind/Documents/FCC/Agweek Survey.xlsx", sheet = 1) %>% as_tibble()
+
+online <- read_excel("C:/Users/gunreet.thind/Documents/FCC/Agweek Survey.xlsx", sheet = 2) %>% as_tibble()
+
+# Naming the survey questions as brief column names
+names(paper) <- c("timestamp", "name", "email", "zip", "age", "phone", "i_am_a", "i_grow",
+                  "i_raise", "read_format", "read_content", "read_freq", "also_read",
+                  "watch_for", "why_neither", "favorite_story", "favorite_content",
+                  "where_market_check", "added_content", "other_feedback")
+
+names(online) <- c("timestamp", "first_name", "last_name", "age", "email", "phone", "zip", 
+                   "i_am_a", "i_am_a_other", "spring_wheat", "winter_wheat", "barley", 
+                   "corn", "soybeans", "sunflowers", "canola", "potatoes", "sugar_beets", 
+                   "pulse", "other_grain", "dairy_cattle", "beef_cattle", "hogs", "sheep",
+                   "poultry", "bison", "other_animal", "read_format", "read_content", 
+                   "read_freq", "also_read", "also_read_text", "watch_for", "why_neither", 
+                   "favorite_story", "favorite_content", "where_market_check", 
+                   "added_content", "other_feedback")
+
+
+# Cleaning paper responses
+detect_value <- function(paper = paper$i_raise, value) {
+  .data <- str_split(paper, ", ")
+
+  for(i in 1: length(.data)) {
+    if(i == 1) {
+      values <-  
+        .data[[i]][str_detect(.data[[i]], value)] %>%
+        str_replace_all(value, "") %>%
+        str_trim() %>%
+        ifelse(length(.) == 0, "0", .)
+    } else {
+      values <- 
+        c(values, 
+          .data[[i]][str_detect(.data[[i]], value)] %>%
+            str_replace_all(value, "") %>%
+            str_trim() %>%
+            ifelse(length(.) == 0, "0", .)
+      )
+    }
+  }
+  
+  values <- gsub("\"", "", values)
+  values <- gsub("\\)", "", values)
+  values <- gsub("\\(", "", values)
+  values <- str_trim(values)
+  return(values)
+}
+
+
+paper$spring_wheat <- detect_value(paper$i_grow, "spring wheat")
+paper$winter_wheat <- detect_value(paper$i_grow, "winter wheat")
+paper$barley <- detect_value(paper$i_grow, "barley")
+paper$corn <- detect_value(paper$i_grow, "corn")
+paper$soybeans <- detect_value(paper$i_grow, "soybeans")
+paper$sunflowers <- detect_value(paper$i_grow, "sunflowers")
+paper$canola <- detect_value(paper$i_grow, "canola")
+paper$potatoes <- detect_value(paper$i_grow, "potatoes")
+paper$sugar_beets <- detect_value(paper$i_grow, "sugar beets")
+paper$pulse <- detect_value(paper$i_grow, "pulse")
+paper$other_grain <- detect_value(paper$i_grow, "other")
+paper$dairy_cattle <- detect_value(paper$i_raise, "dairy cattle")
+paper$beef_cattle <- detect_value(paper$i_raise, "beef cattle")
+paper$hogs <- detect_value(paper$i_raise, "hogs")
+paper$sheep <- detect_value(paper$i_raise, "sheep")
+paper$poultry <- detect_value(paper$i_raise, "poultry")
+paper$bison <- detect_value(paper$i_raise, "bison")
+paper$other_animal <- detect_value(paper$i_raise, "other")
+
+paper$age <- as.numeric(paper$age)
+paper$zip <- as.numeric(paper$zip)
+online$zip <- as.numeric(online$zip)
+
+#Binding paper and online responses
+survey <- 
+  bind_rows(
+    paper %>% 
+      mutate(mode = "paper"),
+    online %>% 
+      mutate(
+        mode = "online"
+      )
+  )
+
+survey %<>% select(-i_grow, -i_raise, -first_name, -last_name)
+  
+```
+
+
+```{r}
+# Data preparation
+
+as_factor <- c("i_am_a","read_format","read_freq","spring_wheat","winter_wheat","barley","corn","soybeans","sunflowers","canola","potatoes","sugar_beets","pulse","other_grain","dairy_cattle","beef_cattle","hogs","sheep","poultry","bison","other_animal","also_read","mode")
+
+for (i in as_factor)
+  (
+  survey[,i] <- as.factor(survey[,i][[i]])
+)
+  
+  
+# survey$i_am_a <- as.factor(survey$i_am_a)
+# survey$read_format <- as.factor(survey$read_format)
+# survey$read_freq <- as.factor(survey$read_freq)
+# survey$spring_wheat <- as.factor(survey$spring_wheat)
+# survey$winter_wheat <- as.factor(survey$winter_wheat)
+# survey$barley <- as.factor(survey$barley)
+# survey$corn <- as.factor(survey$corn)
+# survey$soybeans <- as.factor(survey$soybeans)
+# survey$sunflowers <- as.factor(survey$sunflowers)
+# survey$canola <- as.factor(survey$canola)
+# survey$potatoes <- as.factor(survey$potatoes)
+# survey$sugar_beets <- as.factor(survey$sugar_beets)
+# survey$pulse <- as.factor(survey$pulse)
+# survey$other_grain <- as.factor(survey$other_grain)
+# survey$dairy_cattle <- as.factor(survey$dairy_cattle)
+# survey$beef_cattle <- as.factor(survey$beef_cattle)
+# survey$hogs <- as.factor(survey$hogs)
+# survey$sheep <- as.factor(survey$sheep)
+# survey$poultry <- as.factor(survey$poultry)
+# survey$bison <- as.factor(survey$bison)
+# survey$other_animal <- as.factor(survey$other_animal)
+# 
+# survey$also_read <- as.factor(survey$also_read)
+# survey$read_content <- as.factor(survey$read_content)
+# survey$watch_for <- as.factor(survey$watch_for)
+# survey$favorite_content <- as.factor(survey$favorite_content)
+# survey$where_market_check <- as.factor(survey$where_market_check)
+# survey$added_content <- as.factor(survey$added_content)
+
+# survey$mode <- as.factor(survey$mode)
+
+#Cleaning levels for i_am_a, read_freq,also_read
+
+survey %<>%
+  mutate(
+    i_am_a = fct_collapse(
+      i_am_a,
+      landowner = c("Absentee land owner", 
+                  "Ag land owner",
+                  "Landowner",
+                  "Land owner",
+                  "Farmland Owner",
+                  "Landlord",
+                  "CRP - Landowner Conservationist",
+                  "Owner"
+                  ),
+      farmer = c("Farmer","Farmer/Engineer","farmer","farmer, agribusiness"),
+      retired = c("Retired",
+                "retired",
+                "retired farmer",
+                "Retired farmer",
+                "Retired Farmer",
+                "Retired educator. Grew up on a farm",
+                "Retired ag professor",
+                "Retired ag teacher",
+                "Retired farmer/business",
+                "Retired farmer/rancher",
+                "retired land owner",
+                "Retired rancher",
+                "Retired, rent land out",
+                "Retired dairy farmer",
+                "Retired - rent out land",
+                "Retired, help son on farm",
+                "Retired and in town",
+                "Retired, rent out land"
+                ),
+    semi_retired=c("Semi-retired",
+                   "I'm semi-retired. This info is based off my son's business",
+                   "Part retired, rent some"),
+    renter = c("I rent out my land",
+             "rent to neighbor",
+             "Rent farm out",
+             "Rent out and raise beef cattle",
+             "Rent out land",
+             "Rent land out",
+             "Renter"
+             ),
+    rancher = c("rancher",
+              "rancher, agribusiness",
+              "Hobby rancher",
+              "Part-time small rancher",
+              "Rancher/auctioneer"
+              ),
+    other = c("Ag media",
+              "agribusiness",
+              "agribusiness, rural/non-farm",
+              "Auctions realtor",
+              "Beekeeper",
+              "Construction",
+              "Extension Agent - NDSU",
+              "Grain hauler",
+              "Hired hand",
+              "Import specialist",
+              "Journalism - GFH - Did Agweek",
+              "Laborer",
+              "Logging mill",
+              "Student",
+              "Trucker",
+              "USDA employee",
+            "Veterinarian",
+            "Appraiser",
+            "Land appraiser",
+            "Bank",
+            "Banker",
+            "Farm wife",
+            "Farmer's wife"
+            ),
+    both_farmer_rancher=c("both",
+           "farmer, rancher",
+           "farmer, rancher, both"
+           )
+    )
+    )
+                               
+survey %<>%
+  mutate(
+    read_freq = fct_collapse(
+      read_freq,
+      less_than_half = c("less than half of the magazine",
+                         "about half of the magazine, less than half of the magazine",
+                         "all or nearly all new content, less than half of the magazine"),
+      about_half=c("about half of the magazine",
+                   "all or nearly all new content, about half of the magazine",
+                   "more than half of the magazine, about half of the magazine"),
+      more_than_half = c("all or nearly all new content, more than half of the magazine",
+                         "more than half of the magazine"),
+      little_or_none=c("little or none of the magaine",
+                       "little or none of the magazine")
+      )
+    )
+
+survey %<>%
+  mutate(
+    also_read = fct_collapse(
+      also_read,
+      guide = c("AgriGuide",
+                "Farm and Ranch Guide",
+                "Farm and Ranch Guide, AgriGuide"
+                ),
+      forum = c("Aberdeen Farm Forum",
+                "Farmer's Forum",
+                "Farmers Forum",
+                "Farmers Forum, Aberdeen Farm Forum"
+                ),
+      guide_forum = c("Aberdeen Farm Forum, AgriGuide",
+                    "Farm and Ranch Guide, Aberdeen Farm Forum",
+                    "Farm and Ranch Guide, Aberdeen Farm Forum, AgriGuide",
+                    "Farm and Ranch Guide, Farmers Forum, AgriGuide",
+                    "Farm and Ranch Guide, Farmers Forum",
+                    "Farm and Ranch Guide, Farmers Forum, Aberdeen Farm Forum",
+                    "Farm and Ranch Guide, Farmers Forum, Aberdeen Farm Forum, AgriGuide",
+                    "Farmers Forum, AgriGuide"
+                    ),
+      other = c("Aberdeen Farm Forum, Other",
+                    "Farmers Forum, Aberdeen Farm Forum, Other",
+                    "Farmers Forum, Other",
+                    "AgriGuide, Other",
+                    "Farm and Ranch Guide, AgriGuide, Other",
+                    "Farm and Ranch Guide, Other",
+                     "Farm and Ranch Guide, The Land",
+                    "Farm and Ranch Guide, The Land, AgriGuide",
+                    "The Land, Aberdeen Farm Forum",
+                      "The Land, AgriGuide",
+                "Aberdeen Farm Forum, AgriGuide, Other",
+                            "Farm and Ranch Guide, Aberdeen Farm Forum, Other",
+                            "Farm and Ranch Guide, Farmers Forum, AgriGuide, Other",
+                            "Farm and Ranch Guide, Farmers Forum, Other",
+                            "Farmers Forum, AgriGuide, Other",
+                            "Farm and Ranch Guide, Farmers Forum, Aberdeen Farm Forum, AgriGuide, Other",
+                            "Farm and Ranch Guide, Farmers Forum, Aberdeen Farm Forum, Other",
+                "Farm and Ranch Guide, The Land, AgriGuide, Other",
+                           "Farm and Ranch Guide, The Land, Other",
+                           "The Land, AgriGuide, Other",
+                "Other",
+                "The Land, Farmers Forum, Other",
+                         "The Land, Aberdeen Farm Forum, Other",
+                "The Land, Other",
+                "Farm and Ranch Guide, The Land, Aberdeen Farm Forum",
+                           "Farm and Ranch Guide, The Land, Aberdeen Farm Forum, AgriGuide",
+                           "Farm and Ranch Guide, The Land, Farmers Forum",
+                           "Farm and Ranch Guide, The Land, Farmers Forum, Aberdeen Farm Forum",
+                           "Farm and Ranch Guide, The Land, Farmers Forum, Aberdeen Farm Forum, AgriGuide",
+                           "Farm and Ranch Guide, The Land, Farmers Forum, AgriGuide",
+                           "The Land, Aberdeen Farm Forum, AgriGuide",
+                           "The Land, Farm and Ranch Guide, Aberdeen Farm Forum",
+                           "The Land, Farmers Forum, AgriGuide",
+                           "The Land, Farmers Forum, Aberdeen Farm Forum, AgriGuide",
+                           "The Land, Farmers Forum, AgriGuide"
+                           ),
+      all = c("Farm and Ranch Guide, The Land, Aberdeen Farm Forum, Other",
+              "Farm and Ranch Guide, The Land, Farmers Forum, Aberdeen Farm Forum, AgriGuide, Other",
+              "Farm and Ranch Guide, The Land, Farmers Forum, AgriGuide, Other",
+              "Farm and Ranch Guide, The Land, Farmers Forum, Other"
+                
+                    )
+      
+      )
+    )
+
+#Cleaning levels
+  
+survey %<>%
+  mutate(
+    # For spring wheat
+    spring_wheat = 
+      fct_collapse(
+        spring_wheat,
+        less_than_250 = c("<250 acres","less than 250 acres"),
+        more_than_1000 = c("1,000+ acres","1000+ acres"),
+        between_250_500 = c("250-500 acres","250 to 500 acres"),
+        between_500_1000 = c("500 to 1,000 acres")
+        ),
+    winter_wheat = 
+      fct_collapse(
+        winter_wheat,
+        less_than_250=c("<250 acres","less than 250 acres"),
+        more_than_1000=c("1,000+ acres","1000+ acres"),
+        between_250_500=c("250-500 acres","250 to 500 acres"),
+        between_500_1000=c("500 to 1,000 acres")
+        ),
+    barley = 
+      fct_collapse(
+        barley,
+        less_than_250=c("<250 acres","less than 250 acres"),
+        more_than_1000=c("1,000+ acres","1000+ acres"),
+        between_250_500=c("250-500 acres","250 to 500 acres"),
+        between_500_1000=c("500 to 1,000 acres","500 to 1000 acres")
+        ),
+    corn = 
+      fct_collapse(
+        corn,
+        less_than_250=c("<250 acres","less than 250 acres"),
+        more_than_1000=c("1,000+ acres","1000+ acres"),
+        between_250_500=c("250-500 acres","250 to 500 acres"),
+        between_500_1000=c("500 to 1,000 acres","500 to 1000 acres")
+        ),
+    soybeans = 
+      fct_collapse(
+        soybeans,
+        less_than_250=c("<250 acres","less than 250 acres"),
+        more_than_1000=c("1,000+ acres","1000+ acres"),
+        between_250_500=c("250-500 acres","250 to 500 acres"),
+        between_500_1000=c("500 to 1,000 acres","500 to 1000 acres")
+        ),
+      sunflowers = 
+        fct_collapse(
+          sunflowers,
+          less_than_250=c("<250 acres","less than 250 acres"),
+          more_than_1000=c("1,000+ acres","1000+ acres"),
+          between_250_500=c("250-500 acres","250 to 500 acres"),
+          between_500_1000=c("500 to 1,000 acres","500 to 1000 acres")
+          ),
+      canola = 
+        fct_collapse(
+          canola,
+          less_than_250=c("<250 acres","less than 250 acres"),
+          more_than_1000=c("1,000+ acres","1000+ acres"),
+          between_250_500=c("250-500 acres","250 to 500 acres"),
+          between_500_1000=c("500 to 1,000 acres","500 to 1000 acres")
+          ),
+      potatoes = 
+        fct_collapse(
+          potatoes,
+          less_than_250=c("<250 acres","less than 250 acres"),
+          more_than_1000=c("1,000+ acres","1000+ acres"),
+          between_250_500=c("250-500 acres","250 to 500 acres"),
+          between_500_1000=c("500 to 1,000 acres","500 to 1000 acres")
+          ),
+      sugar_beets = 
+        fct_collapse(
+          sugar_beets,
+          less_than_250=c("<250 acres","less than 250 acres"),
+          more_than_1000=c("1,000+ acres","1000+ acres"),
+          between_250_500=c("250-500 acres","250 to 500 acres"),
+          between_500_1000=c("500 to 1,000 acres","500 to 1000 acres")
+          ),
+      pulse = 
+        fct_collapse(
+          pulse,
+          less_than_250=c("<250 acres","less than 250 acres"),
+          more_than_1000=c("1,000+ acres","1000+ acres"),
+          between_250_500=c("250-500 acres","250 to 500 acres"),
+          between_500_1000=c("500 to 1,000 acres","500 to 1000 acres")
+          ),
+      other_grain = 
+        fct_collapse(
+          other_grain,
+          less_than_250=c("<250 acres","less than 250 acres"),
+          more_than_1000=c("1,000+ acres","1000+ acres"),
+          between_250_500=c("250-500 acres","250 to 500 acres"),
+          between_500_1000=c("500 to 1,000 acres","500 to 1000 acres")
+          ),
+    dairy_cattle = 
+      fct_collapse(
+        dairy_cattle,
+        less_than_100=c("<100","less than 100"),
+        between_100_500=c("100-500","100 to 500")
+      ),
+    beef_cattle = 
+      fct_collapse(
+        beef_cattle,
+        less_than_100=c("<100","less than 100"),
+        between_100_500=c("100-500","100 to 500")
+        ),
+    hogs = 
+      fct_collapse(
+        hogs,
+        less_than_100=c("<100","less than 100"),
+        between_100_500=c("100-500","100 to 500")
+      ),
+    sheep = 
+      fct_collapse(
+        sheep,
+        less_than_100=c("<100","less than 100"),
+        between_100_500=c("100-500","100 to 500")
+      ),
+    poultry = 
+      fct_collapse(
+        poultry,
+        less_than_100=c("<100","less than 100"),
+        between_100_500=c("100-500")
+        ),
+    bison = 
+      fct_collapse(
+        bison,
+        less_than_100=c("<100","less than 100")
+        ),
+    other_animal = 
+      fct_collapse(
+        other_animal,
+        less_than_100=c("<100","less than 100"),
+        between_100_500=c("100-500","100 to 500")
+      )
+  )
+
+
+#Remove the NAs 
+
+survey <- survey[!is.na(survey$age),]
+survey <- survey[!is.na(survey$i_am_a),]
+survey <- survey[!is.na(survey$read_format),]
+survey <- survey[!is.na(survey$read_freq),]
+#survey <- survey[!is.na(survey$also_read),]
+
+
+# #Replacing NAs in grain and animal fields with 0
+
+replace_NA <- c("spring_wheat","winter_wheat","barley","corn","soybeans","sunflowers","canola","potatoes","sugar_beets","pulse","other_grain","dairy_cattle","beef_cattle","hogs","sheep","poultry","bison","other_animal")
+
+for (i in replace_NA)
+  (
+    survey[,i][is.na(i)] <- 0
+  )
+
+# survey$spring_wheat[is.na(survey$spring_wheat)] <- 0
+# survey$winter_wheat[is.na(survey$winter_wheat)] <- 0
+# survey$barley[is.na(survey$barley)] <- 0
+# survey$corn[is.na(survey$corn)] <- 0
+# survey$soybeans[is.na(survey$soybeans)] <- 0
+# survey$sunflowers[is.na(survey$sunflowers)] <- 0
+# survey$canola[is.na(survey$canola)] <- 0
+# survey$potatoes[is.na(survey$potatoes)] <- 0
+# survey$sugar_beets[is.na(survey$sugar_beets)] <- 0
+# survey$pulse[is.na(survey$pulse)] <- 0
+# survey$other_grain[is.na(survey$other_grain)] <- 0
+# 
+# survey$dairy_cattle[is.na(survey$dairy_cattle)] <- 0
+# survey$beef_cattle[is.na(survey$beef_cattle)] <- 0
+# survey$hogs[is.na(survey$hogs)] <- 0
+# survey$sheep[is.na(survey$sheep)] <- 0
+# survey$poultry[is.na(survey$poultry)] <- 0
+# survey$bison[is.na(survey$bison)] <- 0
+# survey$other_animal[is.na(survey$other_animal)] <- 0
+
+#write.csv(x = survey,file = "cleaned_data.csv")
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r}
+#Summary statistics
+summary(survey)
+
+describe(survey$age) 
+
+#Descriptive statistics for i_am_a
+describe(survey$i_am_a) 
+
+#56% of surveyed people are farmers, 6% rancher, 2% both
+
+describe(survey$read_format)
+
+#90% read through print medium
+
+describe(survey$read_freq)
+
+#30% of surveyed people read all or nearly all new content, 32.3% more than half
+
+describe(survey$also_read)
+
+#33% read guides, 20.8% guide and forum, 11.7% forum
+
+describe(survey$spring_wheat)
+describe(survey$winter_wheat)  
+
+#86% of surveyed people don't grow winter wheat so FCC may not print content around it as it may not be relevant to the target audience
+
+describe(survey$barley)
+describe(survey$corn)
+describe(survey$soybeans)
+describe(survey$sunflowers)
+describe(survey$canola)
+describe(survey$potatoes)
+describe(survey$sugar_beets)
+describe(survey$pulse)
+describe(survey$other_grain)
+
+
+describe(survey$dairy_cattle)
+describe(survey$beef_cattle)
+describe(survey$hogs)
+describe(survey$sheep)
+describe(survey$poultry)
+describe(survey$bison)
+describe(survey$other_animal)
+# Cattle data captured suggests very few of the surveyed people raise cattle, could be useful information when creating content
+
+# spring_wheat <-
+#   survey %>% 
+#   filter(spring_wheat != "0" | spring_wheat!="NA")
+
+# d1 <- ggplot(spring_wheat,aes(x = spring_wheat %>% fct_infreq() %>% fct_rev()))+ 
+#    geom_bar()+
+#    coord_flip()+
+#      ggtitle("How many people grow spring wheat?") +
+#   theme_minimal() +
+#    theme(plot.title = element_text(hjust = 0.5), panel.grid = element_blank()) +
+#      xlab("spring_wheat") +
+#   ylab("count")
+
+#Age distribution
+hist(survey$age) # Mostly older people
+
+# ## ggplot visualisations
+# #install.packages("viridis") # dependency
+# #install.packages("devtools")
+# devtools::install_github("ropensci/plotly")
+
+#Trying to use ggplotly, but throwing error, so parked it here for now
+
+g0 <- ggplot(survey,aes(x = read_freq %>% fct_infreq() %>% fct_rev()))+
+      geom_bar()+
+      coord_flip()+
+      ggtitle("How frequently is the content read?")+
+      theme_minimal()+
+      xlab("Frequency of read")+
+      ylab("count")
+
+g0 <- ggplotly(g0)
+
+
+  
+  
+g1 <- ggplot(survey,aes(x = i_am_a %>% fct_infreq() %>% fct_rev()))+ 
+   geom_bar(aes(fill=read_freq%>% fct_infreq() %>% fct_rev()))+
+   coord_flip()+
+     ggtitle("How frequently is the content read by the target audience?") +
+  theme_minimal() +
+   theme(plot.title = element_text(hjust = 0.5), panel.grid = element_blank()) +
+  theme(legend.title=element_blank())+
+     xlab("i_am_a") +
+  ylab("count")
+  
+
+g2 <- ggplot(survey,aes(x = i_am_a %>% fct_infreq() %>% fct_rev()))+ 
+   geom_bar(aes(fill=also_read %>%fct_infreq() %>% fct_rev()))+
+   coord_flip()+
+     ggtitle("What additional sources do target audience read content from?") +
+  theme_minimal() +
+  theme(legend.title=element_blank())+
+  theme(plot.title = element_text(hjust = 0.5), panel.grid = element_blank()) +
+     xlab("i_am_a") +
+  ylab("count")
+
+g3 <- ggplot(survey,aes(x = i_am_a%>% fct_infreq() %>% fct_rev()))+ 
+   geom_bar(aes(fill=read_format%>% fct_infreq() %>% fct_rev()))+
+   coord_flip()+
+     ggtitle("What are the top channels explored by the target audience?") +
+  theme_minimal() +
+  theme(legend.title=element_blank())+
+  theme(plot.title = element_text(hjust = 0.5), panel.grid = element_blank())+
+     xlab("i_am_a") +
+  ylab("count")
+
+###Geographic visualisation of the target audience
+
+#Get lat long data for every zip and join with existing data
+
+
+
+sbbox <- make_bbox(lon = survey$longitude, lat = survey$latitude, f = .1)
+
+us <- get_map(location =sbbox,maptype = "terrain",source = "google",color = "color",zoom=5)
+
+#Distribution of target audience geographically
+
+# survey_1 <- survey %>%
+#   select(i_am_a,latitude,longitude)%>%
+#   group_by(i_am_a)%>%
+#   count()
+
+z1 <- 
+  ggmap(us) +
+  geom_point(
+    data=survey, 
+    aes(
+      x=longitude, 
+      y=latitude,
+      color=i_am_a
+    ),
+    pch=15,
+    size=2
+  ) + 
+  theme_bw() + 
+  labs(
+    fill = "i_am_a",
+    title = "Distribution of Target audience", 
+    x="", 
+    y=""
+  )
+
+winter_wheat <-
+  survey %>% 
+  filter(winter_wheat != "0")
+
+# Areas with winter wheat grown--> can customize content accordingly for these geographies
+# There are smaller winter wheat farms
+
+
+winter_wheat <- 
+  survey %>% 
+  filter(winter_wheat != "0")
+
+z2 <- 
+  ggmap(us)+
+  geom_point(
+    data=winter_wheat, 
+    aes(
+      x=longitude, 
+      y=latitude,
+      color=winter_wheat
+    ),
+    pch=15
+  ) 
+
+##############Should I think on these lines more?############      
+
+
+```
+
+
+```{r}
+# Text mining
+survey_text <- survey %>%
+              select(read_content,watch_for,why_neither,favorite_story,favorite_content,where_market_check,added_content,other_feedback,also_read_text)
+
+```
+
+```{r}
+################# ngrams #####################
+
+
+#For read_content
+
+
+tidy_bigrams <- survey_text %>% unnest_tokens(bigram, read_content, token = "ngrams", n = 2)
+tidy_bigrams_separated <- tidy_bigrams %>%
+  separate(bigram, c("word1", "word2"), sep = " ")
+
+bigrams_filtered <- tidy_bigrams_separated %>%
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word)
+
+bigrams_filtered_united <- bigrams_filtered %>% 
+  unite(bigram, c(word1, word2), sep = " ")
+
+# new bigram counts:
+bigram_counts <- bigrams_filtered_united %>% 
+  count(bigram, sort = TRUE)
+
+write.csv(x = bigram_counts,file = "read_content.csv")
+  
+
+# bigram_counts
+```
+
+```{r}
+### Bi-gram Visualization:
+# getting the top 10 bigrams:
+top_10 <- top_n(bigram_counts, 10)
+top_10$bigram <- as.factor(top_10$bigram)
+
+p1 <- ggplot(top_10) +
+  geom_bar(aes(x = reorder(bigram, n), y = n, fill = n), stat = "identity", color = "black") +
+  scale_fill_gradient2(low = "darkgreen", mid = "white", high = "darkred",guide=FALSE) +
+  coord_flip() +
+  ggtitle("Top 10 Bi-grams", subtitle = "For the column read_content") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5), panel.grid = element_blank()) +
+  xlab("Bi-grams") +
+  ylab("Number of Occurrences")
+
+# Observation: Target audience reads content around ag news, news markets, farm news, agricultural info, so providing specialised knowledge, latest ag developments should be FCC's focus
+```
+
+```{r}
+# For column watch for
+
+tidy_bigrams <- survey_text %>% unnest_tokens(bigram, watch_for, token = "ngrams", n = 2)
+tidy_bigrams_separated <- tidy_bigrams %>%
+  separate(bigram, c("word1", "word2"), sep = " ")
+
+bigrams_filtered <- tidy_bigrams_separated %>%
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word) %>%
+  filter(!word3 %in% stop_words$word)
+
+bigrams_filtered_united <- bigrams_filtered %>% 
+  unite(bigram, c(word1, word2, word3), sep = " ")
+
+# new bigram counts:
+bigram_counts <- bigrams_filtered_united %>% 
+  count(bigram, sort = TRUE)
+
+write.csv(x = bigram_counts,file = "watch_for.csv")
+
+bigram_counts <- tidy_bigrams %>% 
+  count(bigram, sort = TRUE)
+
+# getting the top 10 bigrams:
+top_10 <- top_n(bigram_counts, 10)
+top_10$bigram <- as.factor(top_10$bigram)
+
+p2 <- ggplot(top_10) +
+  geom_bar(aes(x = reorder(bigram, n), y = n, fill = n), stat = "identity", color = "black") +
+  scale_fill_gradient2(low = "darkgreen", mid = "white", high = "darkred",guide=FALSE) +
+  coord_flip() +
+  ggtitle("Top 10 Bi-grams", subtitle = "For the column watch_for") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5), panel.grid = element_blank()) +
+  xlab("Bi-grams") +
+  ylab("Number of Occurrences")
+
+# Observation: Fewer people watch agweek TV as compared to agweek magazine. FCC can work to improve communication through this channel
+```
+```{r}
+# For column why_neither
+
+tidy_bigrams <- survey_text %>% unnest_tokens(bigram, why_neither, token = "ngrams", n = 2)
+tidy_bigrams_separated <- tidy_bigrams %>%
+  separate(bigram, c("word1", "word2"), sep = " ")
+
+bigrams_filtered <- tidy_bigrams_separated %>%
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word) 
+
+bigrams_filtered_united <- bigrams_filtered %>%
+  unite(bigram, c(word1, word2), sep = " ")
+
+bigrams <- bigrams_filtered_united%>% select(bigram)
+
+bigram_counts <- bigrams_filtered_united %>% 
+  count(bigram, sort = TRUE)
+
+# Customer churn: Largely, people don't prefer FCC content because of these reasons:
+#1. Bad feedback on Agweek TV
+#2. Prefer other channels
+#3. Wrong airtime
+
+```
+
+```{r}
+# For column favorite story
+
+tidy_bigrams <- survey_text %>% unnest_tokens(bigram, favorite_story, token = "ngrams", n = 2)
+tidy_bigrams_separated <- tidy_bigrams %>%
+  separate(bigram, c("word1", "word2"), sep = " ")
+
+bigrams_filtered <- tidy_bigrams_separated %>%
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word)
+
+bigrams_filtered_united <- bigrams_filtered %>% 
+  unite(bigram, c(word1, word2), sep = " ")
+
+# new bigram counts:
+bigram_counts <- bigrams_filtered_united %>% 
+  count(bigram, sort = TRUE)
+
+write.csv(x = bigram_counts,file = "fav_story.csv")
+
+# getting the top 10 bigrams:
+top_10 <- top_n(bigram_counts, 10)
+top_10$bigram <- as.factor(top_10$bigram)
+
+p3 <- ggplot(top_10) +
+  geom_bar(aes(x = reorder(bigram, n), y = n, fill = n), stat = "identity", color = "black") +
+  scale_fill_gradient2(low = "darkgreen", mid = "white", high = "darkred",guide=FALSE) +
+  coord_flip() +
+  ggtitle("Top 10 Bi-grams", subtitle = "For the column favorite_story") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5), panel.grid = element_blank()) +
+  xlab("Bi-grams") +
+  ylab("Number of Occurrences")
+```
+Observation: FCC can focus on more future stories around ryan taylor, pinke post,shawna olson etc.
+```{r}
+# For column favorite_content
+
+tidy_bigrams <- survey_text %>% unnest_tokens(bigram, favorite_content, token = "ngrams", n = 2)
+tidy_bigrams_separated <- tidy_bigrams %>%
+  separate(bigram, c("word1", "word2"), sep = " ")
+
+bigrams_filtered <- tidy_bigrams_separated %>%
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word)
+
+bigrams_filtered_united <- bigrams_filtered %>% 
+  unite(bigram, c(word1, word2), sep = " ")
+
+# new bigram counts:
+bigram_counts <- bigrams_filtered_united %>% 
+  count(bigram, sort = TRUE)
+
+write.csv(x = bigram_counts,file = "fav_content.csv")
+
+# getting the top 10 bigrams:
+top_10 <- top_n(bigram_counts, 10)
+top_10$bigram <- as.factor(top_10$bigram)
+
+p4 <- ggplot(top_10) +
+  geom_bar(aes(x = reorder(bigram, n), y = n, fill = n), stat = "identity", color = "black") +
+  scale_fill_gradient2(low = "darkgreen", mid = "white", high = "darkred",guide=FALSE) +
+  coord_flip() +
+  ggtitle("Top 10 Bi-grams", subtitle = "For the column favorite_content") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5), panel.grid = element_blank()) +
+  xlab("Bi-grams") +
+  ylab("Number of Occurrences")
+```
+
+Observation: Local stories or localisation of content could be of key importance for FCC, followed by more Ads,auction sales and market news respectively
+```{r}
+# For column where_market_check
+
+tidy_bigrams <- survey_text %>% unnest_tokens(bigram, where_market_check, token = "ngrams", n = 2)
+tidy_bigrams_separated <- tidy_bigrams %>%
+  separate(bigram, c("word1", "word2"), sep = " ")
+
+bigrams_filtered <- tidy_bigrams_separated %>%
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word)
+
+bigrams_filtered_united <- bigrams_filtered %>% 
+  unite(bigram, c(word1, word2), sep = " ")
+
+# new bigram counts:
+bigram_counts <- bigrams_filtered_united %>% 
+  count(bigram, sort = TRUE)
+
+write.csv(x = bigram_counts,file = "market_check.csv")
+
+# getting the top 10 bigrams:
+top_10 <- top_n(bigram_counts, 10)
+top_10$bigram <- as.factor(top_10$bigram)
+
+p5 <- ggplot(top_10) +
+  geom_bar(aes(x = reorder(bigram, n), y = n, fill = n), stat = "identity", color = "black") +
+  scale_fill_gradient2(low = "darkgreen", mid = "white", high = "darkred",guide=FALSE) +
+  coord_flip() +
+  ggtitle("Top 10 Bi-grams", subtitle = "For the column where_market_check") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5), panel.grid = element_blank()) +
+  xlab("Bi-grams") +
+  ylab("Number of Occurrences")
+```
+
+```{r}
+# For column added_content
+
+tidy_bigrams <- survey_text %>% unnest_tokens(bigram, added_content, token = "ngrams", n = 2)
+tidy_bigrams_separated <- tidy_bigrams %>%
+  separate(bigram, c("word1", "word2"), sep = " ")
+
+bigrams_filtered <- tidy_bigrams_separated %>%
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word)
+
+bigrams_filtered_united <- bigrams_filtered %>% 
+  unite(bigram, c(word1, word2), sep = " ")
+
+# new bigram counts:
+bigram_counts <- bigrams_filtered_united %>% 
+  count(bigram, sort = TRUE)
+
+```
+
+```{r}
+tidy_bigrams <- survey_text %>% unnest_tokens(bigram, why_neither, token = "ngrams", n = 2)
+tidy_bigrams_separated <- tidy_bigrams %>%
+  separate(bigram, c("word1", "word2"), sep = " ")
+
+bigrams_filtered <- tidy_bigrams_separated %>%
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word)
+
+bigrams_filtered_united <- bigrams_filtered %>% 
+  unite(bigram, c(word1, word2), sep = " ")
+
+# new bigram counts:
+bigram_counts <- tidy_bigrams %>% 
+  count(bigram, sort = TRUE)
+
+#write.csv(x = bigram_counts,file = "fav_content.csv")
+
+```
+
+```{r}
+
+#survey$customer_id <- 1:nrow(survey)
+# 
+# 
+# 
+# library(factoextra)
+# 
+# fviz_nbclust(survey_cluster,hcut,method = "silhouette",hc_method="complete",k.max=9)
+
+
+```
+
+
+
+```{r}
+# clarax <- clara(survey_cluster, 4, sampsize=2500,metric="euclidean")
+# 
+# clara1<-fviz_cluster(clarax, stand = FALSE, geom = "point",pointsize = 1,show.clust.cent = TRUE,frame=TRUE,title="Clusters")
+# clara1
+# summary(clara1)
+```
+
+```{r}
+
+#### Data driven personas using gower distance and pam clustering #############
+
+data(zipcode)
+
+zipcode$zip <- as.numeric(zipcode$zip)
+survey <- survey%>%left_join(zipcode, by="zip")
+
+#write.csv(x = survey,file = "cleaned_data_v4.csv")
+
+survey$state <- as.factor(survey$state)
+
+survey_cluster <- survey%>% select(age,i_am_a,read_format,read_freq,state,spring_wheat,winter_wheat, barley, corn,soybeans, sunflowers, canola, potatoes, sugar_beets, 
+                   pulse, other_grain, dairy_cattle, beef_cattle, hogs, sheep,
+                   poultry, bison, other_animal,mode,latitude,longitude)
+
+
+#survey_cluster_1 <- survey%>% select(age,i_am_a,read_format,read_freq,state,latitude,longitude)
+
+set.seed(1234)
+diss_matrix<-daisy(survey_cluster, metric = "gower")
+pam_fit <- pam(diss_matrix, diss = TRUE, k = 3)
+
+pam_fit$silinfo
+
+
+pam_results <- survey %>%
+  mutate(cluster = pam_fit$clustering) %>%
+  group_by(cluster)
+#%>%
+  #do(the_summary = summary(.))
+
+write.csv(x = pam_results,file = "clusters_v.csv")
+
+pam_results$the_summary
+
+survey_cluster[pam_fit$medoids, ]
+```
+
+
+
+```{r}
+
+tsne_obj <- Rtsne(diss_matrix, is_distance = TRUE)
+
+tsne_data <- tsne_obj$Y %>%
+  data.frame() %>%
+  setNames(c("X", "Y")) %>%
+  mutate(cluster = factor(pam_fit$clustering))
+
+ggplot(aes(x = X, y = Y), data = tsne_data) +
+  geom_point(aes(color = cluster))
+```
+```{r}
+# h.fit <- hclust(diss_matrix, method = "ward.D")
+# # plot(hcluster, hang = 0, label = F, main = "Cluster Dendrogram")
+# 
+# plot(h.fit)
+# 
+# groups <- cutree(h.fit, k=5) # cut tree into 4 clusters
+# 
+# # draw dendogram with red borders around the 4 clusters
+# rect.hclust(h.fit, k=5, border="red") 
+# 
+# clusplot(survey_cluster, groups, color=TRUE, shade=TRUE,
+#          labels=2, lines=0, main= 'Customer segments')
+# 
+# cluster.deals<-merge(survey,groups,by= "age")
+```
+
+```{r}
+########### Sentiment Analysis  ###################### 
+
+# Unnest tokens:
+tidywords <- survey_text %>% unnest_tokens(word,other_feedback)%>%
+  anti_join(stop_words, by = "word") %>% 
+  left_join(get_sentiments("bing"), by = "word")%>%
+  filter(sentiment %in% c("positive", 
+                          "negative")) %>% 
+  count(sentiment)
+
+# tidywords <- survey_text %>% unnest_tokens(word, other_feedback)%>%
+#   anti_join(stop_words, by = "word") %>% 
+#   left_join(get_sentiments("bing"), by = "word")%>%
+#   count(word,sentiment) %>% 
+#   spread(key = sentiment, value = n) %>% 
+#   ungroup()
+
+
+
+# Set NA to zero:
+# tidywords$positive <- ifelse(is.na(tidywords$positive), 0, tidywords$positive)
+# tidywords$negative <- ifelse(is.na(tidywords$negative), 0, tidywords$negative)
+# 
+# tidywordscentered <- tidywords %>% mutate(sentiment = positive - negative - mean(positive - negative)) %>% 
+#   select(word,sentiment)
+
+
+# Visualization required
+```
+
+```{r}
+#####Representative sample or not
+all_zip <- read_excel("C:/Users/gunreet.thind/Documents/FCC/AGWEEK list by zip.xlsx", sheet = 1) %>% as_tibble()
+
+all_zip <- all_zip%>% filter(AGWEEK!="NA")
+
+# zip_sample <- distinct(survey,zip)
+# 
+# zip_pop <- distinct(all_zip,ZIPCODE)
+
+
+colnames(all_zip)[1] <- "zip"
+
+all_zip$zip <- as.numeric(all_zip$zip)
+
+survey_1 <- survey%>% left_join(y = all_zip,by="zip")
+
+survey_2 <- survey_1%>% filter(zip!="NA")%>%
+            group_by(zip)%>%
+            mutate(count=n())%>%
+            mutate(weight=round(count/AGWEEK*100,2))
+
+write.csv(survey_2,"sample.csv")
+
+x <- survey_2%>%filter(weight==200)  #data quality issues
+
+y <- survey_2%>%filter(zip==59215)
+
+```
+
+```{r}
+
+```
+
