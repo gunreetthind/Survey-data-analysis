@@ -821,7 +821,7 @@ bigrams <- bigrams_filtered_united%>% select(bigram)
 bigram_counts <- bigrams_filtered_united %>% 
   count(bigram, sort = TRUE)
 
-# Customer churn: Largely, people don't prefer FCC content because of these reasons:
+# Customer churn: Largely, people don't prefer X content because of these reasons:
 #1. Bad feedback on Agweek TV
 #2. Prefer other channels
 #3. Wrong airtime
