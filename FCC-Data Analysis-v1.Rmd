@@ -1,5 +1,5 @@
 ---
-title: "FCC_Data Analysis"
+title: "Survey_Data Analysis"
 output: html_document
 ---
 
@@ -49,9 +49,9 @@ You can also embed plots, for example:
 
 ```{r pressure, echo=FALSE}
 # Loading online and paper responses
-paper <- read_excel("C:/Users/gunreet.thind/Documents/FCC/Agweek Survey.xlsx", sheet = 1) %>% as_tibble()
+paper <- read_excel("Load data", sheet = 1) %>% as_tibble()
 
-online <- read_excel("C:/Users/gunreet.thind/Documents/FCC/Agweek Survey.xlsx", sheet = 2) %>% as_tibble()
+online <- read_excel("Load data", sheet = 2) %>% as_tibble()
 
 # Naming the survey questions as brief column names
 names(paper) <- c("timestamp", "name", "email", "zip", "age", "phone", "i_am_a", "i_grow",
