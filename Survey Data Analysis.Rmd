@@ -554,7 +554,7 @@ describe(survey$also_read)
 describe(survey$spring_wheat)
 describe(survey$winter_wheat)  
 
-#86% of surveyed people don't grow winter wheat so FCC may not print content around it as it may not be relevant to the target audience
+#86% of surveyed people don't grow winter wheat so X may not print content around it as it may not be relevant to the target audience
 
 describe(survey$barley)
 describe(survey$corn)
@@ -597,7 +597,7 @@ hist(survey$age) # Mostly older people
 # #install.packages("devtools")
 # devtools::install_github("ropensci/plotly")
 
-#Trying to use ggplotly, but throwing error, so parked it here for now
+
 
 g0 <- ggplot(survey,aes(x = read_freq %>% fct_infreq() %>% fct_rev()))+
       geom_bar()+
@@ -702,9 +702,7 @@ z2 <-
       color=winter_wheat
     ),
     pch=15
-  ) 
-
-##############Should I think on these lines more?############      
+  )   
 
 
 ```
@@ -761,7 +759,7 @@ p1 <- ggplot(top_10) +
   xlab("Bi-grams") +
   ylab("Number of Occurrences")
 
-# Observation: Target audience reads content around ag news, news markets, farm news, agricultural info, so providing specialised knowledge, latest ag developments should be FCC's focus
+# Observation: Target audience reads content around ag news, news markets, farm news, agricultural info, so providing specialised knowledge, latest ag developments should be X's focus
 ```
 
 ```{r}
@@ -802,7 +800,7 @@ p2 <- ggplot(top_10) +
   xlab("Bi-grams") +
   ylab("Number of Occurrences")
 
-# Observation: Fewer people watch agweek TV as compared to agweek magazine. FCC can work to improve communication through this channel
+
 ```
 ```{r}
 # For column why_neither
@@ -864,7 +862,7 @@ p3 <- ggplot(top_10) +
   xlab("Bi-grams") +
   ylab("Number of Occurrences")
 ```
-Observation: FCC can focus on more future stories around ryan taylor, pinke post,shawna olson etc.
+
 ```{r}
 # For column favorite_content
 
@@ -900,7 +898,7 @@ p4 <- ggplot(top_10) +
   ylab("Number of Occurrences")
 ```
 
-Observation: Local stories or localisation of content could be of key importance for FCC, followed by more Ads,auction sales and market news respectively
+
 ```{r}
 # For column where_market_check
 
@@ -1098,40 +1096,8 @@ tidywords <- survey_text %>% unnest_tokens(word,other_feedback)%>%
 #   select(word,sentiment)
 
 
-# Visualization required
 ```
 
-```{r}
-#####Representative sample or not
-all_zip <- read_excel("C:/Users/gunreet.thind/Documents/FCC/AGWEEK list by zip.xlsx", sheet = 1) %>% as_tibble()
-
-all_zip <- all_zip%>% filter(AGWEEK!="NA")
-
-# zip_sample <- distinct(survey,zip)
-# 
-# zip_pop <- distinct(all_zip,ZIPCODE)
 
 
-colnames(all_zip)[1] <- "zip"
-
-all_zip$zip <- as.numeric(all_zip$zip)
-
-survey_1 <- survey%>% left_join(y = all_zip,by="zip")
-
-survey_2 <- survey_1%>% filter(zip!="NA")%>%
-            group_by(zip)%>%
-            mutate(count=n())%>%
-            mutate(weight=round(count/AGWEEK*100,2))
-
-write.csv(survey_2,"sample.csv")
-
-x <- survey_2%>%filter(weight==200)  #data quality issues
-
-y <- survey_2%>%filter(zip==59215)
-
-```
-
-```{r}
-
-```
 
